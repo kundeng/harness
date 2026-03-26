@@ -1,116 +1,118 @@
 # Harness
 
-**Agent Team & Skill Architect** — Claude Code 플러그인
+**Agent Team & Skill Architect** — A Claude Code Plugin
 
-도메인/프로젝트에 맞는 하네스를 구성하고, 전문 에이전트를 정의하며, 에이전트가 사용할 스킬을 생성하는 메타 스킬.
+[한국어](README_KO.md)
 
-## 개요
+A meta-skill that designs domain-specific agent teams, defines specialized agents, and generates the skills they use.
 
-Harness는 Claude Code의 에이전트 팀 시스템을 활용하여 복잡한 작업을 전문 에이전트 팀으로 분해·조율하는 아키텍처 도구다. "하네스 구성해줘"라고 말하면, 사용자의 도메인에 맞는 에이전트 정의(`.claude/agents/`)와 스킬(`.claude/skills/`)을 자동 생성한다.
+## Overview
 
-## 핵심 기능
+Harness leverages Claude Code's agent team system to decompose complex tasks into coordinated teams of specialized agents. Say "build a harness for this project" and it automatically generates agent definitions (`.claude/agents/`) and skills (`.claude/skills/`) tailored to your domain.
 
-- **에이전트 팀 설계** — 파이프라인, 팬아웃/팬인, 전문가 풀, 생성-검증, 감독자, 계층적 위임 등 6가지 아키텍처 패턴 지원
-- **스킬 생성** — Progressive Disclosure 패턴으로 컨텍스트를 효율 관리하는 스킬 자동 생성
-- **오케스트레이션** — 에이전트 간 데이터 전달, 에러 핸들링, 팀 조율 프로토콜 포함
-- **검증 체계** — 트리거 검증, 드라이런 테스트, With-skill vs Without-skill 비교 테스트
+## Key Features
 
-## 워크플로우
+- **Agent Team Design** — 6 architectural patterns: Pipeline, Fan-out/Fan-in, Expert Pool, Producer-Reviewer, Supervisor, and Hierarchical Delegation
+- **Skill Generation** — Auto-generates skills with Progressive Disclosure for efficient context management
+- **Orchestration** — Inter-agent data passing, error handling, and team coordination protocols
+- **Validation** — Trigger verification, dry-run testing, and with-skill vs without-skill comparison tests
+
+## Workflow
 
 ```
-Phase 1: 도메인 분석
+Phase 1: Domain Analysis
     ↓
-Phase 2: 팀 아키텍처 설계 (에이전트 팀 vs 서브 에이전트)
+Phase 2: Team Architecture Design (Agent Teams vs Subagents)
     ↓
-Phase 3: 에이전트 정의 생성 (.claude/agents/)
+Phase 3: Agent Definition Generation (.claude/agents/)
     ↓
-Phase 4: 스킬 생성 (.claude/skills/)
+Phase 4: Skill Generation (.claude/skills/)
     ↓
-Phase 5: 통합 및 오케스트레이션
+Phase 5: Integration & Orchestration
     ↓
-Phase 6: 검증 및 테스트
+Phase 6: Validation & Testing
 ```
 
-## 설치
+## Installation
 
-### 마켓플레이스 등록 후 설치
+### Via Marketplace
 
-#### 마켓플레이스 추가
+#### Add the marketplace
 ```shell
 /plugin marketplace add revfactory/harness
 ```
 
-#### 플러그인 설치
+#### Install the plugin
 ```shell
 /plugin install harness@harness
 ```
 
-### 글로벌 스킬로 직접 설치
+### Direct Installation as Global Skill
 
 ```shell
-# skills 디렉토리를 ~/.claude/skills/harness/에 복사
+# Copy the skills directory to ~/.claude/skills/harness/
 cp -r skills/harness ~/.claude/skills/harness
 ```
 
-## 플러그인 구조
+## Plugin Structure
 
 ```
 harness/
 ├── .claude-plugin/
-│   └── plugin.json                 # 플러그인 매니페스트
+│   └── plugin.json                 # Plugin manifest
 ├── skills/
 │   └── harness/
-│       ├── SKILL.md                # 메인 스킬 정의 (6 Phase 워크플로우)
+│       ├── SKILL.md                # Main skill definition (6-Phase workflow)
 │       └── references/
-│           ├── agent-design-patterns.md   # 6가지 아키텍처 패턴
-│           ├── orchestrator-template.md   # 팀/서브에이전트 오케스트레이터 템플릿
-│           ├── team-examples.md           # 실전 팀 구성 예시 5종
-│           ├── skill-writing-guide.md     # 스킬 작성 가이드
-│           ├── skill-testing-guide.md     # 테스트/평가 방법론
-│           └── qa-agent-guide.md          # QA 에이전트 통합 가이드
+│           ├── agent-design-patterns.md   # 6 architectural patterns
+│           ├── orchestrator-template.md   # Team/subagent orchestrator templates
+│           ├── team-examples.md           # 5 real-world team configurations
+│           ├── skill-writing-guide.md     # Skill authoring guide
+│           ├── skill-testing-guide.md     # Testing & evaluation methodology
+│           └── qa-agent-guide.md          # QA agent integration guide
 └── README.md
 ```
 
-## 사용법
+## Usage
 
-Claude Code에서 다음과 같이 트리거한다:
-
-```
-하네스 구성해줘
-하네스 설계해줘
-이 프로젝트에 맞는 에이전트 팀 구축해줘
-```
-
-### 실행 모드
-
-| 모드 | 설명 | 권장 상황 |
-|------|------|----------|
-| **에이전트 팀** (기본) | TeamCreate + SendMessage + TaskCreate | 2개 이상 에이전트, 협업 필요 |
-| **서브 에이전트** | Agent 도구 직접 호출 | 단발성 작업, 통신 불필요 |
-
-### 아키텍처 패턴
-
-| 패턴 | 설명 |
-|------|------|
-| 파이프라인 | 순차 의존 작업 |
-| 팬아웃/팬인 | 병렬 독립 작업 |
-| 전문가 풀 | 상황별 선택 호출 |
-| 생성-검증 | 생성 후 품질 검수 |
-| 감독자 | 중앙 에이전트가 동적 분배 |
-| 계층적 위임 | 상위→하위 재귀적 위임 |
-
-## 산출물
-
-하네스가 생성하는 파일:
+Trigger in Claude Code with prompts like:
 
 ```
-프로젝트/
+Build a harness for this project
+Design an agent team for this domain
+Set up a harness
+```
+
+### Execution Modes
+
+| Mode | Description | Recommended For |
+|------|-------------|-----------------|
+| **Agent Teams** (default) | TeamCreate + SendMessage + TaskCreate | 2+ agents requiring collaboration |
+| **Subagents** | Direct Agent tool invocation | One-off tasks, no inter-agent communication needed |
+
+### Architecture Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| Pipeline | Sequential dependent tasks |
+| Fan-out/Fan-in | Parallel independent tasks |
+| Expert Pool | Context-dependent selective invocation |
+| Producer-Reviewer | Generation followed by quality review |
+| Supervisor | Central agent with dynamic task distribution |
+| Hierarchical Delegation | Top-down recursive delegation |
+
+## Output
+
+Files generated by Harness:
+
+```
+your-project/
 ├── .claude/
-│   ├── agents/          # 에이전트 정의 파일
+│   ├── agents/          # Agent definition files
 │   │   ├── analyst.md
 │   │   ├── builder.md
 │   │   └── qa.md
-│   └── skills/          # 스킬 파일
+│   └── skills/          # Skill files
 │       ├── analyze/
 │       │   └── skill.md
 │       └── build/
@@ -118,10 +120,30 @@ Claude Code에서 다음과 같이 트리거한다:
 │           └── references/
 ```
 
-## 요구사항
+## Built with Harness
 
-- [에이전트 팀 기능 활성화](https://code.claude.com/docs/en/agent-teams): `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+### Harness 100
 
-## 라이선스
+**[revfactory/harness-100](https://github.com/revfactory/harness-100)** — 100 production-ready agent team harnesses across 10 domains, available in both English and Korean (200 packages total). Each harness ships with 4-5 specialist agents, an orchestrator skill, and domain-specific skills — all generated by this plugin. 1,808 markdown files covering content creation, software development, data/AI, business strategy, education, legal, health, and more.
+
+### Research: A/B Testing Harness Effectiveness
+
+**[revfactory/claude-code-harness](https://github.com/revfactory/claude-code-harness)** — A controlled experiment across 15 software engineering tasks measuring the impact of structured pre-configuration on LLM code agent output quality.
+
+| Metric | Without Harness | With Harness | Improvement |
+|--------|:-:|:-:|:-:|
+| Average Quality Score | 49.5 | 79.3 | **+60%** |
+| Win Rate | — | — | **100%** (15/15) |
+| Output Variance | — | — | **-32%** |
+
+Key finding: effectiveness scales with task complexity — the harder the task, the greater the improvement (+23.8 Basic, +29.6 Advanced, +36.2 Expert).
+
+> Full paper: *Hwang, M. (2026). Harness: Structured Pre-Configuration for Enhancing LLM Code Agent Output Quality.*
+
+## Requirements
+
+- [Agent Teams enabled](https://code.claude.com/docs/en/agent-teams): `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+
+## License
 
 Apache 2.0
