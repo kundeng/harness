@@ -2,6 +2,15 @@
   <img src="harness_banner.png" alt="Harness Banner" width="600">
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Version-1.0.1-brightgreen.svg" alt="Version">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+  <img src="https://img.shields.io/badge/Claude_Code-Plugin-purple.svg" alt="Claude Code Plugin">
+  <img src="https://img.shields.io/badge/Patterns-6_Architectures-orange.svg" alt="6 Architecture Patterns">
+  <img src="https://img.shields.io/badge/Mode-Agent_Teams-green.svg" alt="Agent Teams">
+  <a href="https://github.com/revfactory/harness/stargazers"><img src="https://img.shields.io/github/stars/revfactory/harness?style=social" alt="GitHub Stars"></a>
+</p>
+
 # Harness
 
 **Agent Team & Skill Architect** — A Claude Code Plugin
