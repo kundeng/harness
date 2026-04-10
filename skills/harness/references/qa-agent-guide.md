@@ -1,228 +1,228 @@
-# QA 에이전트 설계 가이드
+# QA Agent Design Guide
 
-빌드 하네스에 QA 에이전트를 포함할 때 참고하는 가이드. 실제 프로젝트(SatangSlide)에서 발견된 버그 패턴과 그 근본 원인 분석을 바탕으로, QA가 놓치기 쉬운 결함을 체계적으로 잡는 검증 방법론을 제공한다.
-
----
-
-## 목차
-
-1. QA 에이전트가 놓치는 결함의 패턴
-2. 통합 정합성 검증 (Integration Coherence Verification)
-3. QA 에이전트 설계 원칙
-4. 검증 체크리스트 템플릿
-5. QA 에이전트 정의 템플릿
+A reference guide for including a QA agent in a build harness. Based on bug patterns discovered in a real project (SatangSlide) and their root cause analysis, this guide provides a systematic verification methodology for catching defects that QA commonly misses.
 
 ---
 
-## 1. QA 에이전트가 놓치는 결함의 패턴
+## Table of Contents
 
-### 1-1. 경계면 불일치 (Boundary Mismatch)
-
-가장 빈번한 결함. 두 컴포넌트가 각각 "올바르게" 구현되어 있지만, 연결 지점에서 계약이 어긋남.
-
-| 경계면 | 불일치 예시 | 놓치는 이유 |
-|--------|-----------|-----------|
-| API 응답 → 프론트 훅 | API가 `{ projects: [...] }` 반환, 훅이 `SlideProject[]` 기대 | 각각 개별 검증하면 정상, 교차 비교 안 함 |
-| API 응답 필드명 → 타입 정의 | API가 `thumbnailUrl`(camelCase), 타입이 `thumbnail_url`(snake_case) | TypeScript 제네릭으로 캐스팅하면 컴파일러가 못 잡음 |
-| 파일 경로 → 링크 href | 페이지가 `/dashboard/create`에 있는데 링크가 `/create`로 지정 | 파일 구조와 href를 교차 비교하지 않음 |
-| 상태 전이 맵 → 실제 status 업데이트 | 맵에 `generating_template → template_approved` 정의, 코드에서 전환 누락 | 맵 존재 확인만 하고, 모든 업데이트 코드를 추적하지 않음 |
-| API 엔드포인트 → 프론트 훅 | API 존재하지만 대응 훅 없음 (호출 안 됨) | API 목록과 훅 목록을 1:1 매핑하지 않음 |
-| 즉시 응답 → 비동기 결과 | API가 즉시 `{ status }` 반환, 프론트가 `data.failedIndices` 접근 | 동기/비동기 응답 구분 없이 타입만 확인 |
-
-### 1-2. 왜 정적 코드 리뷰로 못 잡나
-
-- **TypeScript 제네릭의 한계**: `fetchJson<SlideProject[]>()` — 런타임 응답이 `{ projects: [...] }`여도 컴파일 통과
-- **`npm run build` 통과 ≠ 정상 동작**: 타입 캐스팅, `any`, 제네릭이 사용되면 빌드는 성공하지만 런타임에 실패
-- **존재 검증 vs 연결 검증의 차이**: "API가 있는가?"와 "API의 응답이 호출측의 기대와 일치하는가?"는 전혀 다른 검증
+1. Defect Patterns That QA Agents Miss
+2. Integration Coherence Verification
+3. QA Agent Design Principles
+4. Verification Checklist Template
+5. QA Agent Definition Template
 
 ---
 
-## 2. 통합 정합성 검증 (Integration Coherence Verification)
+## 1. Defect Patterns That QA Agents Miss
 
-QA 에이전트에 반드시 포함해야 하는 **교차 비교 검증** 영역.
+### 1-1. Boundary Mismatch
 
-### 2-1. API 응답 ↔ 프론트 훅 타입 교차 검증
+The most frequent defect. Two components are each implemented "correctly," but the contract breaks at their connection point.
 
-**방법**: 각 API route의 `NextResponse.json()` 호출부와 대응 훅의 `fetchJson<T>` 타입 파라미터를 비교.
+| Boundary | Mismatch Example | Why It's Missed |
+|----------|-----------------|-----------------|
+| API response → frontend hook | API returns `{ projects: [...] }`, hook expects `SlideProject[]` | Each passes individual verification; no cross-comparison is done |
+| API response field name → type definition | API uses `thumbnailUrl` (camelCase), type uses `thumbnail_url` (snake_case) | TypeScript generic casting bypasses the compiler |
+| File path → link href | Page is at `/dashboard/create` but link points to `/create` | File structure and href are not cross-compared |
+| State transition map → actual status update | Map defines `generating_template → template_approved`, but the code omits this transition | Only checks that the map exists; doesn't trace all update code |
+| API endpoint → frontend hook | API exists but has no corresponding hook (never called) | API list and hook list are not mapped 1:1 |
+| Immediate response → async result | API immediately returns `{ status }`, frontend accesses `data.failedIndices` | Types are checked without distinguishing sync/async responses |
 
-```
-검증 단계:
-1. API route에서 NextResponse.json()에 전달하는 객체의 shape 추출
-2. 대응 훅에서 fetchJson<T>의 T 타입 확인
-3. shape과 T가 일치하는지 비교
-4. 래핑 여부 확인 (API가 { data: [...] }를 반환하면 훅이 .data를 꺼내는지)
-```
+### 1-2. Why Static Code Review Fails to Catch These
 
-**특히 주의할 패턴:**
-- 페이지네이션 API: `{ items: [], total, page }` vs 프론트가 배열 기대
-- snake_case DB 필드 → camelCase API 응답 → 프론트 타입 정의 간 불일치
-- 즉시 응답 (202 Accepted) vs 최종 결과의 shape 차이
+- **Limitations of TypeScript generics**: `fetchJson<SlideProject[]>()` — compiles even if the runtime response is `{ projects: [...] }`
+- **Passing `npm run build` ≠ correct behavior**: When type casting, `any`, or generics are used, the build succeeds but fails at runtime
+- **Existence check vs. connection check**: "Does the API exist?" and "Does the API's response match the caller's expectations?" are entirely different verifications
 
-### 2-2. 파일 경로 ↔ 링크/라우터 경로 매핑
+---
 
-**방법**: `src/app/` 하위 page 파일의 URL 경로를 추출하고, 코드 내 모든 `href`, `router.push()`, `redirect()` 값과 대조.
+## 2. Integration Coherence Verification
 
-```
-검증 단계:
-1. src/app/ 하위 page.tsx 파일 경로에서 URL 패턴 추출
-   - (group) → URL에서 제거
-   - [param] → 동적 세그먼트
-2. 코드 내 모든 href=, router.push(, redirect( 값 수집
-3. 각 링크가 실제 존재하는 page 경로와 매칭되는지 확인
-4. route group 내부 페이지의 URL 접두사 주의 (예: dashboard/ 하위)
-```
+**Cross-comparison verification** areas that must be included in any QA agent.
 
-### 2-3. 상태 전이 완전성 추적
+### 2-1. API Response ↔ Frontend Hook Type Cross-Verification
 
-**방법**: 코드에서 모든 `status:` 업데이트를 추출하여 상태 전이 맵과 대조.
+**Method**: Compare each API route's `NextResponse.json()` call site with the corresponding hook's `fetchJson<T>` type parameter.
 
 ```
-검증 단계:
-1. 상태 전이 맵(STATE_TRANSITIONS)에서 허용된 전이 목록 추출
-2. 모든 API route에서 .update({ status: "..." }) 패턴 검색
-3. 각 전이가 맵에 정의되어 있는지 확인
-4. 맵에 정의된 전이 중 코드에서 실행되지 않는 것 식별 (죽은 전이)
-5. 특히: 중간 상태(예: generating_template)에서 최종 상태(template_approved)로의 전환이 누락되지 않았는지
+Verification steps:
+1. Extract the shape of the object passed to NextResponse.json() in the API route
+2. Check the T type of fetchJson<T> in the corresponding hook
+3. Compare whether the shape and T match
+4. Check for wrapping (if the API returns { data: [...] }, does the hook unwrap .data?)
 ```
 
-### 2-4. API 엔드포인트 ↔ 프론트 훅 1:1 매핑
+**Patterns to watch for:**
+- Pagination APIs: `{ items: [], total, page }` vs frontend expecting an array
+- Mismatches across snake_case DB fields → camelCase API response → frontend type definitions
+- Shape differences between immediate responses (202 Accepted) and final results
 
-**방법**: 모든 API route와 프론트 훅을 나열하여 짝이 맞는지 확인.
+### 2-2. File Path ↔ Link/Router Path Mapping
+
+**Method**: Extract URL paths from page files under `src/app/` and compare them against all `href`, `router.push()`, and `redirect()` values in the code.
 
 ```
-검증 단계:
-1. src/app/api/ 하위 route.ts에서 HTTP 메서드별 엔드포인트 목록 추출
-2. src/hooks/ 하위 use*.ts에서 fetch 호출 URL 목록 추출
-3. API 엔드포인트 중 훅에서 호출하지 않는 것 식별 → "사용 안 됨" 플래그
-4. "사용 안 됨"이 의도적인지 (관리 API 등) 아닌지 (호출 누락) 판단
+Verification steps:
+1. Extract URL patterns from page.tsx file paths under src/app/
+   - (group) → removed from URL
+   - [param] → dynamic segment
+2. Collect all href=, router.push(, redirect( values in the code
+3. Verify that each link matches an actually existing page path
+4. Watch for URL prefixes of pages inside route groups (e.g., under dashboard/)
+```
+
+### 2-3. State Transition Completeness Tracking
+
+**Method**: Extract all `status:` updates from the code and compare them against the state transition map.
+
+```
+Verification steps:
+1. Extract the list of allowed transitions from the state transition map (STATE_TRANSITIONS)
+2. Search all API routes for .update({ status: "..." }) patterns
+3. Verify that each transition is defined in the map
+4. Identify transitions defined in the map but never executed in code (dead transitions)
+5. In particular: check that transitions from intermediate states (e.g., generating_template) to final states (template_approved) are not missing
+```
+
+### 2-4. API Endpoint ↔ Frontend Hook 1:1 Mapping
+
+**Method**: List all API routes and frontend hooks to verify they are properly paired.
+
+```
+Verification steps:
+1. Extract the list of endpoints by HTTP method from route.ts files under src/app/api/
+2. Extract the list of fetch call URLs from use*.ts files under src/hooks/
+3. Identify API endpoints not called by any hook → flag as "unused"
+4. Determine whether "unused" is intentional (e.g., admin APIs) or unintentional (missing call)
 ```
 
 ---
 
-## 3. QA 에이전트 설계 원칙
+## 3. QA Agent Design Principles
 
-### 3-1. Explore 타입이 아닌 general-purpose 타입을 사용하라
+### 3-1. Use a General-Purpose Type, Not an Explore Type
 
-QA 에이전트가 `Explore` 타입이면 읽기만 가능하다. 하지만 효과적인 QA는:
-- Grep으로 패턴 검색 (모든 `NextResponse.json()` 추출)
-- 스크립트 실행으로 자동 대조 (API shape vs 훅 타입)
-- 필요 시 수정까지 가능
+If the QA agent is an `Explore` type, it can only read. But effective QA requires:
+- Pattern searching with Grep (extract all `NextResponse.json()` calls)
+- Running scripts for automated comparison (API shape vs hook type)
+- Making fixes when needed
 
-**권장**: `general-purpose` 타입으로 설정하되, 에이전트 정의에서 "검증 → 리포트 → 수정 요청" 프로토콜을 명시.
+**Recommended**: Set to `general-purpose` type, but specify a "verify → report → request fix" protocol in the agent definition.
 
-### 3-2. 체크리스트는 "존재 확인"보다 "교차 비교"를 우선하라
+### 3-2. Prioritize "Cross-Comparison" Over "Existence Checks" in Checklists
 
-| 약한 체크리스트 | 강한 체크리스트 |
-|---------------|---------------|
-| API 엔드포인트가 존재하는가? | API 엔드포인트의 응답 shape과 대응 훅의 타입이 일치하는가? |
-| 상태 전이 맵이 정의되어 있는가? | 모든 status 업데이트 코드가 맵의 전이와 일치하는가? |
-| 페이지 파일이 존재하는가? | 코드 내 모든 링크가 실제 존재하는 페이지를 가리키는가? |
-| TypeScript strict mode인가? | 제네릭 캐스팅으로 우회된 타입 안전성이 없는가? |
+| Weak Checklist | Strong Checklist |
+|----------------|-----------------|
+| Does the API endpoint exist? | Does the API endpoint's response shape match the corresponding hook's type? |
+| Is the state transition map defined? | Do all status update code paths match the transitions in the map? |
+| Does the page file exist? | Do all links in the code point to actually existing pages? |
+| Is TypeScript strict mode enabled? | Are there type safety bypasses through generic casting? |
 
-### 3-3. "양쪽을 동시에 읽어라" 원칙
+### 3-3. The "Read Both Sides Simultaneously" Principle
 
-QA가 경계면 버그를 잡으려면, 한쪽만 읽어선 안 된다. 반드시:
-- API route **와** 대응 훅을 **같이** 읽고
-- 상태 전이 맵 **와** 실제 업데이트 코드를 **같이** 읽고
-- 파일 구조 **와** 링크 경로를 **같이** 읽어야 한다
+To catch boundary bugs, QA must not read only one side. It must:
+- Read the API route **and** the corresponding hook **together**
+- Read the state transition map **and** the actual update code **together**
+- Read the file structure **and** the link paths **together**
 
-에이전트 정의에 이 원칙을 명시적으로 기재하라.
+State this principle explicitly in the agent definition.
 
-### 3-4. QA는 빌드 후가 아니라, 각 모듈 완성 직후에 실행하라
+### 3-4. Run QA Immediately After Each Module Is Complete, Not After the Entire Build
 
-오케스트레이터에서 QA를 "Phase 4: 전체 완성 후"에만 배치하면:
-- 버그가 누적되어 수정 비용이 높아짐
-- 초기 경계면 불일치가 후속 모듈에 전파됨
+If the orchestrator places QA only in "Phase 4: after full completion":
+- Bugs accumulate, raising the cost of fixes
+- Early boundary mismatches propagate to subsequent modules
 
-**권장 패턴**: 각 백엔드 API 완성 시 즉시 해당 API + 대응 훅의 교차 검증 수행 (incremental QA).
+**Recommended pattern**: Perform cross-verification of each backend API + its corresponding hook immediately upon API completion (incremental QA).
 
 ---
 
-## 4. 검증 체크리스트 템플릿
+## 4. Verification Checklist Template
 
-QA 에이전트 정의에 포함할 웹 애플리케이션용 통합 정합성 체크리스트.
+An integration coherence checklist for web applications, to be included in the QA agent definition.
 
 ```markdown
-### 통합 정합성 검증 (웹 앱)
+### Integration Coherence Verification (Web App)
 
-#### API ↔ 프론트엔드 연결
-- [ ] 모든 API route의 응답 shape과 대응 훅의 제네릭 타입이 일치
-- [ ] 래핑된 응답({ items: [...] })은 훅에서 unwrap하는지 확인
-- [ ] snake_case ↔ camelCase 변환이 일관되게 적용
-- [ ] 즉시 응답(202)과 최종 결과의 shape이 프론트에서 구분되는지 확인
-- [ ] 모든 API 엔드포인트에 대응하는 프론트 훅이 존재하고 실제로 호출됨
+#### API ↔ Frontend Connection
+- [ ] Response shapes of all API routes match the generic types of their corresponding hooks
+- [ ] Wrapped responses ({ items: [...] }) are unwrapped in hooks
+- [ ] snake_case ↔ camelCase conversion is applied consistently
+- [ ] Immediate responses (202) and final result shapes are distinguished on the frontend
+- [ ] All API endpoints have corresponding frontend hooks that are actually called
 
-#### 라우팅 정합성
-- [ ] 코드 내 모든 href/router.push 값이 실제 page 파일 경로와 매칭
-- [ ] route group ((group))이 URL에서 제거되는 것을 고려한 경로 검증
-- [ ] 동적 세그먼트([id])가 올바른 파라미터로 채워지는지 확인
+#### Routing Coherence
+- [ ] All href/router.push values in code match actual page file paths
+- [ ] Path verification accounts for route groups ((group)) being removed from URLs
+- [ ] Dynamic segments ([id]) are filled with correct parameters
 
-#### 상태 머신 정합성
-- [ ] 정의된 모든 상태 전이가 코드에서 실행됨 (죽은 전이 없음)
-- [ ] 코드의 모든 status 업데이트가 전이 맵에 정의됨 (무단 전이 없음)
-- [ ] 중간 상태에서 최종 상태로의 전환이 누락되지 않음
-- [ ] 프론트에서 상태 기반 분기(if status === "X")의 X가 실제 도달 가능
+#### State Machine Coherence
+- [ ] All defined state transitions are executed in code (no dead transitions)
+- [ ] All status updates in code are defined in the transition map (no unauthorized transitions)
+- [ ] No missing transitions from intermediate states to final states
+- [ ] Values X in frontend state-based branching (if status === "X") are actually reachable
 
-#### 데이터 흐름 정합성
-- [ ] DB 스키마 필드명과 API 응답 필드명의 매핑이 일관됨
-- [ ] 프론트 타입 정의와 API 응답의 필드명이 일치
-- [ ] 옵셔널 필드에 대한 null/undefined 처리가 양쪽에서 일관됨
+#### Data Flow Coherence
+- [ ] Mapping between DB schema field names and API response field names is consistent
+- [ ] Frontend type definition field names match API response field names
+- [ ] null/undefined handling for optional fields is consistent on both sides
 ```
 
 ---
 
-## 5. QA 에이전트 정의 템플릿
+## 5. QA Agent Definition Template
 
-빌드 하네스의 QA 에이전트에 포함할 핵심 섹션.
+Core sections to include in the build harness QA agent.
 
 ```markdown
 ---
 name: qa-inspector
-description: "QA 검증 전문가. 스펙 준수, 통합 정합성, 디자인 품질을 검증."
+description: "QA verification specialist. Verifies spec compliance, integration coherence, and design quality."
 ---
 
 # QA Inspector
 
-## 핵심 역할
-스펙 대비 구현 품질과 **모듈 간 통합 정합성**을 검증한다.
+## Core Role
+Verify implementation quality against specs and **integration coherence across modules**.
 
-## 검증 우선순위
+## Verification Priority
 
-1. **통합 정합성** (가장 높음) — 경계면 불일치가 런타임 에러의 주요 원인
-2. **기능 스펙 준수** — API/상태머신/데이터모델
-3. **디자인 품질** — 색상/타이포/반응형
-4. **코드 품질** — 미사용 코드, 명명 규칙
+1. **Integration coherence** (highest) — boundary mismatches are the primary cause of runtime errors
+2. **Functional spec compliance** — API/state machine/data model
+3. **Design quality** — colors/typography/responsiveness
+4. **Code quality** — unused code, naming conventions
 
-## 검증 방법: "양쪽 동시 읽기"
+## Verification Method: "Read Both Sides Simultaneously"
 
-경계면 검증은 반드시 **양쪽 코드를 동시에 열어** 비교한다:
+For boundary verification, always **open and compare code from both sides**:
 
-| 검증 대상 | 왼쪽 (생산자) | 오른쪽 (소비자) |
-|----------|-------------|---------------|
-| API 응답 shape | route.ts의 NextResponse.json() | hooks/의 fetchJson<T> |
-| 라우팅 | src/app/ page 파일 경로 | href, router.push 값 |
-| 상태 전이 | STATE_TRANSITIONS 맵 | .update({ status }) 코드 |
-| DB → API → UI | 테이블 컬럼명 | API 응답 필드 → 타입 정의 |
+| Verification Target | Left (Producer) | Right (Consumer) |
+|--------------------|-----------------|-----------------|
+| API response shape | NextResponse.json() in route.ts | fetchJson<T> in hooks/ |
+| Routing | src/app/ page file paths | href, router.push values |
+| State transitions | STATE_TRANSITIONS map | .update({ status }) code |
+| DB → API → UI | Table column names | API response fields → type definitions |
 
-## 팀 통신 프로토콜
+## Team Communication Protocol
 
-- 발견 즉시 해당 에이전트에게 구체적 수정 요청 (파일:라인 + 수정 방법)
-- 경계면 이슈는 양쪽 에이전트 **모두**에게 알림
-- 리더에게: 검증 리포트 (통과/실패/미검증 항목 구분)
+- Upon discovery, send a specific fix request to the responsible agent (file:line + fix method)
+- For boundary issues, notify **both** agents on each side
+- To the leader: verification report (distinguish passed/failed/unverified items)
 ```
 
 ---
 
-## 실제 사례: SatangSlide에서 발견된 버그
+## Real-World Cases: Bugs Found in SatangSlide
 
-이 가이드의 모든 내용은 아래 실제 버그에서 추출한 교훈이다:
+All content in this guide is derived from lessons learned from the following actual bugs:
 
-| 버그 | 경계면 | 원인 |
-|------|--------|------|
-| `projects?.filter is not a function` | API→훅 | API가 `{projects:[]}` 반환, 훅이 배열 기대 |
-| 대시보드 모든 링크 404 | 파일경로→href | `/dashboard/` 접두사 누락 |
-| 테마 이미지 안 보임 | API→컴포넌트 | `thumbnailUrl` vs `thumbnail_url` |
-| 테마 선택 저장 안 됨 | API→훅 | select-theme API 존재, 훅 없음 |
-| 생성 페이지 영원히 대기 | 상태전이→코드 | `template_approved` 전이 코드 누락 |
-| `data.failedIndices` 크래시 | 즉시응답→프론트 | 백그라운드 결과를 즉시 응답에서 접근 |
-| 완료 후 슬라이드 보기 404 | 파일경로→href | `/projects/` → `/dashboard/projects/` |
+| Bug | Boundary | Cause |
+|-----|----------|-------|
+| `projects?.filter is not a function` | API→hook | API returns `{projects:[]}`, hook expects an array |
+| All dashboard links return 404 | file path→href | Missing `/dashboard/` prefix |
+| Theme images not displaying | API→component | `thumbnailUrl` vs `thumbnail_url` |
+| Theme selection not saving | API→hook | select-theme API exists, but no hook |
+| Creation page waits forever | state transition→code | Missing `template_approved` transition code |
+| `data.failedIndices` crash | immediate response→frontend | Accessing background result from immediate response |
+| View slides after completion returns 404 | file path→href | `/projects/` → `/dashboard/projects/` |
